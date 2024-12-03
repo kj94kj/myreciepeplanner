@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import java.time.LocalDate
 import java.util.Calendar
 import android.app.AlarmManager as AlarmManager
 
@@ -35,7 +36,7 @@ class AlarmViewModel: ViewModel() {
 
     fun saveAlarm(context: Context) {
         _alarmList.add(stateToAlarmData())
-        setAlarm(context, _alarmList[_alarmList.size-1].hour, _alarmList[_alarmList.size-1].minute,
+        setAlarm(context, _alarmList[_alarmList.size-1].localDate, _alarmList[_alarmList.size-1].hour, _alarmList[_alarmList.size-1].minute,
             _alarmList.size-1)
 
         _uiState.update { currentState ->
@@ -49,7 +50,7 @@ class AlarmViewModel: ViewModel() {
         cancelAlarm(context, _uiState.value.alarmId)
         _alarmList.removeAt(_uiState.value.alarmId)
         _alarmList.add(_uiState.value.alarmId, stateToAlarmData())
-        setAlarm(context, _uiState.value.hour, _uiState.value.minute, _uiState.value.alarmId)
+        setAlarm(context, _recipeAlarmState.value.localDate, _uiState.value.hour, _uiState.value.minute, _uiState.value.alarmId)
         resetState()
     }
 
@@ -68,9 +69,9 @@ class AlarmViewModel: ViewModel() {
         )
 
         if (_alarmList[index].activate) {
-            setAlarm(context, _alarmList[index].hour, _alarmList[index].minute, index)
+            setAlarm(context, _alarmList[index].localDate, _alarmList[index].hour, _alarmList[index].minute, index)
         } else {
-            cancelAlarm(context, index) // 알람 취소
+            cancelAlarm(context, index)
         }
     }
 
@@ -131,32 +132,54 @@ class AlarmViewModel: ViewModel() {
         }
     }
 
-    private fun setAlarm(context: Context, hour: Int, minute: Int, alarmId: Int) {
+    private fun setAlarm(context: Context, localDate: LocalDate, hour: Int, minute: Int, alarmId: Int) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val calendar = Calendar.getInstance().apply {
-            timeInMillis = System.currentTimeMillis()
+
+        val alarmTime = Calendar.getInstance().apply {
+            set(Calendar.YEAR, localDate.year)
+            set(Calendar.MONTH, localDate.monthValue - 1) // Calendar.MONTH는 0부터 시작
+            set(Calendar.DAY_OF_MONTH, localDate.dayOfMonth)
             set(Calendar.HOUR_OF_DAY, hour)
             set(Calendar.MINUTE, minute)
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
         }
-        val intent = Intent(context, AlarmReceiver::class.java)
-        val pendingIntent = PendingIntent.getBroadcast(
-            context, alarmId, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        alarmManager.setExact(AlarmManager.RTC_WAKEUP, calendar.timeInMillis, pendingIntent)
-    }
 
-    private fun cancelAlarm(context: Context, alarmId: Int) {
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val intent = Intent(context, AlarmReceiver::class.java)
+        if (alarmTime.timeInMillis <= System.currentTimeMillis()) {
+            return
+        }
+
+        val intent = Intent(context, AlarmReceiver::class.java).apply {
+            putExtra("alarmId", alarmId)
+        }
+
         val pendingIntent = PendingIntent.getBroadcast(
             context,
             alarmId,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        alarmManager.cancel(pendingIntent) // 알람 취소
+
+        alarmManager.setExact(
+            AlarmManager.RTC_WAKEUP,
+            alarmTime.timeInMillis,
+            pendingIntent
+        )
+    }
+
+    private fun cancelAlarm(context: Context, alarmId: Int) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+
+        val intent = Intent(context, AlarmReceiver::class.java)
+
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            alarmId,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        alarmManager.cancel(pendingIntent)
         pendingIntent.cancel()
     }
 

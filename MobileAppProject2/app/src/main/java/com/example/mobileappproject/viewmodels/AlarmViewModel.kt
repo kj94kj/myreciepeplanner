@@ -165,6 +165,12 @@ class AlarmViewModel: ViewModel(
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
         }
+
+        if (calendar.timeInMillis <= System.currentTimeMillis()) {
+            Log.d("AlarmViewModel", "알람이 과거 시간으로 설정됨: 설정 취소")
+            return // 과거 시간이면 알람 설정하지 않음
+        }
+
         val intent = Intent(context, AlarmReceiver::class.java)
         val pendingIntent = PendingIntent.getBroadcast(
             context, alarmId, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
@@ -195,6 +201,7 @@ class AlarmViewModel: ViewModel(
         }
     }
 
+    // 지금 시간보다 일찍 설정된 알람은 알람으로 취급안함.
     private fun recalculateNextAlarm() {
         val now = Calendar.getInstance()
         val nextAlarm = _alarmList
@@ -202,6 +209,16 @@ class AlarmViewModel: ViewModel(
                     && it.alarmId >= 0
                     && it.recipeName == recipeUiState.value.recipeName
                     && it.localDate == recipeUiState.value.localDate}
+            .filter {alarm ->
+                val alarmTime = Calendar.getInstance().apply {
+                    set(Calendar.HOUR_OF_DAY, alarm.hour)
+                    set(Calendar.MINUTE, alarm.minute)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }
+                val timeDifference = alarmTime.timeInMillis - now.timeInMillis
+                timeDifference > 0
+            }
             .minByOrNull { alarm ->
                 val alarmTime = Calendar.getInstance().apply {
                     set(Calendar.HOUR_OF_DAY, alarm.hour)
@@ -209,7 +226,6 @@ class AlarmViewModel: ViewModel(
                     set(Calendar.SECOND, 0)
                     set(Calendar.MILLISECOND, 0)
                 }
-                if (alarmTime.before(now)) alarmTime.add(Calendar.DAY_OF_YEAR, 1)
                 alarmTime.timeInMillis - now.timeInMillis
             }
 
