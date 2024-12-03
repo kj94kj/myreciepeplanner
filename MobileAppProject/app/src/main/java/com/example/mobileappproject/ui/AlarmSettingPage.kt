@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.mobileappproject.R
-import java.util.Calendar
+import com.example.mobileappproject.viewmodels.AlarmViewModel
 
 // 초기 시간 설정을 받아야 한다.
 @Composable

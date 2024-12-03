@@ -29,10 +29,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.mobileappproject.R
 import com.example.mobileappproject.data.AlarmData
+import com.example.mobileappproject.viewmodels.AlarmViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,6 +51,8 @@ fun AlarmPage(
     returnToTodoListPage: () -> Unit,
     goToAlarmSettingPage: () -> Unit,
 ){
+
+    val recipeUiState by alarmViewModel.recipeUiState.collectAsState()
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -122,7 +121,11 @@ fun AlarmPage(
                     .padding(bottom = 30.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
-                items(alarmViewModel.alarmList.filter { it.alarmId >= 0 }) { alarmData ->
+                items(alarmViewModel.alarmList.filter {
+                    it.alarmId >= 0
+                            && it.recipeName == recipeUiState.recipeName
+                            && it.localDate == recipeUiState.localDate
+                }) { alarmData ->
                     AlarmItem(
                         alarmViewModel, context, alarmData,
                         alarmDataToState, removeAlarm, alarmSwitch, goToAlarmSettingPage

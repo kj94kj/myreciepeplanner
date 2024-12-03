@@ -15,3 +15,5 @@ val p4 = Color(0xFFFF9494)
 val p3 = Color(0x8DFFD1D1)
 val p2 = Color(0xFFFFE3E1)
 val p1 = Color(0xFFFFF5E4)
+
+val SkyBlue = Color(0xFF87CEEB)
