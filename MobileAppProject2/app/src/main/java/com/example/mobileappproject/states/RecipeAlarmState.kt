@@ -10,4 +10,5 @@ object SharedState {
 data class RecipeAlarmState(
     val recipeName: String="",
     val localDate: LocalDate=LocalDate.now(),
+    val nickname: String=""
 )

@@ -10,5 +10,8 @@ data class AlarmData(
     val minute: Int,
     val activate: Boolean,
     val recipeName: String,
-    val localDate: LocalDate
-)
+    val localDate: String,
+    val id: String=""
+) {
+    constructor() : this(0, 0, 0, false, "", "", "")
+}

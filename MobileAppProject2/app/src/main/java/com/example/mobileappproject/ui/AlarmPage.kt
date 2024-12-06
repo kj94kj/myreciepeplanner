@@ -27,6 +27,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -55,6 +56,10 @@ fun AlarmPage(
     val recipeUiState by alarmViewModel.recipeUiState.collectAsState()
     val nextAlarmText by alarmViewModel.nextAlarmText.collectAsState()
 
+    LaunchedEffect(Unit) {
+        alarmViewModel.getAlarm()
+    }
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar ={
@@ -67,6 +72,7 @@ fun AlarmPage(
                 })
         }
     ){innerPadding ->
+
         Column(
             modifier = Modifier
                 .padding(innerPadding)
@@ -124,7 +130,7 @@ fun AlarmPage(
                 items(alarmViewModel.alarmList.filter {
                     it.alarmId >= 0
                             && it.recipeName == recipeUiState.recipeName
-                            && it.localDate == recipeUiState.localDate
+                            && it.localDate == recipeUiState.localDate.toString()
                 }) { alarmData ->
                     AlarmItem(
                         alarmViewModel, context, alarmData,

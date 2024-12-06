@@ -12,12 +12,15 @@ import com.example.mobileappproject.data.AlarmData
 import com.example.mobileappproject.ui.AlarmUiState
 import com.example.mobileappproject.states.RecipeAlarmState
 import com.example.mobileappproject.states.SharedState
+import com.google.firebase.database.DatabaseReference
+import com.google.firebase.database.FirebaseDatabase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import java.util.Calendar
 import android.app.AlarmManager as AlarmManager
 
@@ -41,6 +44,8 @@ class AlarmViewModel: ViewModel(
 
     val recipeUiState = SharedState.recipeAlarmState
 
+    var _isGet = false
+
     init {
         observeRecipeUiState()
     }
@@ -54,25 +59,111 @@ class AlarmViewModel: ViewModel(
         }
     }
 
+    private var _database = FirebaseDatabase.getInstance()
+
+    private fun getAlarmsRef(nickname: String): DatabaseReference {
+        return _database.getReference("alarms").child(nickname)
+    }
+
+
+    fun getAlarm(){
+        if(_isGet)
+            return
+
+        // db의 알람들을 가져오는데 alarmList에 넣고 size-1의 id를 부여해줌
+        if(_alarmList.size == 0){
+            val alarmsRef = getAlarmsRef(recipeUiState.value.nickname)
+            alarmsRef.get().addOnSuccessListener { snapshot ->
+                if (snapshot.exists()) {
+                    snapshot.children.forEach { childSnapshot ->
+                        val alarm = childSnapshot.getValue(AlarmData::class.java)
+                        val key = childSnapshot.key
+
+                        if (alarm != null && key != null) {
+                            if(recipeUiState.value.recipeName == alarm.recipeName
+                                && recipeUiState.value.localDate.toString() == alarm.localDate){
+                                val updatedAlarm = alarm.copy(alarmId = _alarmList.size)
+                                _alarmList.add(updatedAlarm)
+                                println("Add Alarm ${updatedAlarm.alarmId}")
+                            }
+                        }
+                    }
+
+                    // UI 상태 업데이트
+                    _uiState.update { currentState ->
+                        currentState.copy(
+                            alarmId = _alarmList.size
+                        )
+                    }
+
+                    recalculateNextAlarm()
+
+                    println("alarm set _alarmList")
+                } else {
+                    println("no alarm ${recipeUiState.value.nickname}")
+                }
+                _isGet = true
+            }.addOnFailureListener { exception ->
+                println("get failed ${exception.message}")
+            }
+        }
+    }
+
 
     fun saveAlarm(context: Context) {
-        _alarmList.add(stateToAlarmData())
-        setAlarm(context, _alarmList[_alarmList.size-1].hour, _alarmList[_alarmList.size-1].minute,
-            _alarmList.size-1)
+        val alarmsRef = getAlarmsRef(recipeUiState.value.nickname)
+        val newKey = alarmsRef.push().key
+        if (newKey != null) {
+            val alarmData = stateToAlarmData().copy(id = newKey)
 
-        _uiState.update { currentState ->
-            currentState.copy(
-                alarmId = _alarmList.size
-            )
+            alarmsRef.child(newKey).setValue(alarmData).addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    _alarmList.add(alarmData)
+
+                    val localDate = LocalDate.parse(_alarmList[_alarmList.size-1].localDate)
+                    val year = localDate.year
+                    val month = localDate.monthValue
+                    val day = localDate.dayOfMonth
+
+                    setAlarm(context, year, month, day, _alarmList[_alarmList.size-1].hour, _alarmList[_alarmList.size-1].minute,
+                        _alarmList.size-1)
+
+                    _uiState.update { currentState ->
+                        currentState.copy(
+                            alarmId = _alarmList.size
+                        )
+                    }
+                } else {
+                    println("save failed ${task.exception}")
+                }
+                recalculateNextAlarm()
+            }
         }
-        recalculateNextAlarm()
     }
 
     fun updateAlarm(context: Context){
+        val alarmsRef = getAlarmsRef(recipeUiState.value.nickname)
         cancelAlarm(context, _uiState.value.alarmId)
         _alarmList.removeAt(_uiState.value.alarmId)
-        _alarmList.add(_uiState.value.alarmId, stateToAlarmData())
-        setAlarm(context, _uiState.value.hour, _uiState.value.minute, _uiState.value.alarmId)
+        val alarmData = stateToAlarmData()
+        _alarmList.add(_uiState.value.alarmId, alarmData)
+
+        val localDate = LocalDate.parse(_alarmList[_uiState.value.alarmId].localDate)
+        val year = localDate.year
+        val month = localDate.monthValue
+        val day = localDate.dayOfMonth
+
+        setAlarm(context, year, month, day, _uiState.value.hour, _uiState.value.minute, _uiState.value.alarmId)
+
+        alarmsRef.child(alarmData.id).setValue(alarmData).addOnCompleteListener { task ->
+            if (task.isSuccessful) {
+                println("alarm updated {$alarmData.id}")
+
+            } else {
+                println("Failed to update alarm: ${task.exception}")
+            }
+        }
+
         resetState()
         recalculateNextAlarm()
     }
@@ -80,10 +171,23 @@ class AlarmViewModel: ViewModel(
     // 알람리스트에서 볼 수 있는건 인덱스로 지정해놓음. 나중에 알람id로 바꿔야할 수도 있음
     // 편의상 alarmId에 음수를 붙이고, 음수가 붙은 알람id는 컬럼으로 안만들어지게함.
     fun removeAlarm(context: Context, index: Int){
+        val alarmsRef = getAlarmsRef(recipeUiState.value.nickname)
         cancelAlarm(context, index)
+
+        val newId = (-1) * _alarmList[index].alarmId + (-1)
         _alarmList[index]=_alarmList[index].copy(
-            alarmId = (-1) * _alarmList[index].alarmId + (-1)
+            alarmId = newId
         )
+
+        alarmsRef.child(_alarmList[index].id).removeValue().addOnCompleteListener { task ->
+            if (task.isSuccessful) {
+                println("alarm updated id")
+
+            } else {
+                println("Failed to update alarm: ${task.exception}")
+            }
+        }
+
         recalculateNextAlarm()
     }
 
@@ -93,7 +197,11 @@ class AlarmViewModel: ViewModel(
         )
 
         if (_alarmList[index].activate) {
-            setAlarm(context, _alarmList[index].hour, _alarmList[index].minute, index)
+            val localDate = LocalDate.parse(_alarmList[index].localDate)
+            val year = localDate.year
+            val month = localDate.monthValue
+            val day = localDate.dayOfMonth
+            setAlarm(context, year, month, day, _alarmList[index].hour, _alarmList[index].minute, index)
         } else {
             cancelAlarm(context, index) // 알람 취소
         }
@@ -107,7 +215,7 @@ class AlarmViewModel: ViewModel(
             minute = _uiState.value.minute,
             activate = _uiState.value.activate,
             recipeName = recipeUiState.value.recipeName,
-            localDate = recipeUiState.value.localDate
+            localDate = recipeUiState.value.localDate.toString()
         )
     }
 
@@ -156,10 +264,13 @@ class AlarmViewModel: ViewModel(
         }
     }
 
-    private fun setAlarm(context: Context, hour: Int, minute: Int, alarmId: Int) {
+    private fun setAlarm(context: Context, year: Int, month: Int, day: Int, hour: Int, minute: Int, alarmId: Int) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val calendar = Calendar.getInstance().apply {
             timeInMillis = System.currentTimeMillis()
+            set(Calendar.YEAR, year)
+            set(Calendar.MONTH, month - 1)
+            set(Calendar.DAY_OF_MONTH, day)
             set(Calendar.HOUR_OF_DAY, hour)
             set(Calendar.MINUTE, minute)
             set(Calendar.SECOND, 0)
@@ -205,36 +316,49 @@ class AlarmViewModel: ViewModel(
     private fun recalculateNextAlarm() {
         val now = Calendar.getInstance()
         val nextAlarm = _alarmList
-            .filter { it.activate
-                    && it.alarmId >= 0
-                    && it.recipeName == recipeUiState.value.recipeName
-                    && it.localDate == recipeUiState.value.localDate}
-            .filter {alarm ->
+            .filter {
+                it.activate
+                        && it.alarmId >= 0
+                        && it.recipeName == recipeUiState.value.recipeName
+                        && it.localDate == recipeUiState.value.localDate.toString()
+            }
+            .filter { alarm ->
+                val localDate = LocalDate.parse(alarm.localDate)
                 val alarmTime = Calendar.getInstance().apply {
+                    set(Calendar.YEAR, localDate.year)
+                    set(Calendar.MONTH, localDate.monthValue - 1) // MONTH는 0부터 시작
+                    set(Calendar.DAY_OF_MONTH, localDate.dayOfMonth)
                     set(Calendar.HOUR_OF_DAY, alarm.hour)
                     set(Calendar.MINUTE, alarm.minute)
                     set(Calendar.SECOND, 0)
                     set(Calendar.MILLISECOND, 0)
                 }
-                val timeDifference = alarmTime.timeInMillis - now.timeInMillis
-                timeDifference > 0
+
+                // 현재 시간 이후의 알람만 포함
+                alarmTime.timeInMillis > now.timeInMillis
             }
             .minByOrNull { alarm ->
+                val localDate = LocalDate.parse(alarm.localDate)
                 val alarmTime = Calendar.getInstance().apply {
+                    set(Calendar.YEAR, localDate.year)
+                    set(Calendar.MONTH, localDate.monthValue - 1)
+                    set(Calendar.DAY_OF_MONTH, localDate.dayOfMonth)
                     set(Calendar.HOUR_OF_DAY, alarm.hour)
                     set(Calendar.MINUTE, alarm.minute)
                     set(Calendar.SECOND, 0)
                     set(Calendar.MILLISECOND, 0)
                 }
+                // 가장 가까운 알람 시간으로 정렬
                 alarmTime.timeInMillis - now.timeInMillis
             }
 
         _nextAlarmText.update {
             nextAlarm?.let {
+                String.format("다음 시간은")
                 if(it.hour >= 12){
-                    String.format("%02d : %02d에 울립니다", it.hour-12, it.minute)
+                    String.format("오후 %02d : %02d에 울립니다", it.hour-12, it.minute)
                 }else{
-                    String.format("%02d : %02d에 울립니다", it.hour, it.minute)
+                    String.format("오전 %02d : %02d에 울립니다", it.hour, it.minute)
                 }
             } ?: "모든 알람이 꺼진 상태입니다."
         }

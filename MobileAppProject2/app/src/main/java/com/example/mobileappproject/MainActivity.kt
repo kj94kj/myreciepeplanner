@@ -17,11 +17,13 @@ import com.example.mobileappproject.viewmodels.AlarmViewModel
 import com.example.mobileappproject.ui.MainScreen
 import com.example.mobileappproject.viewmodels.UserViewModel
 import com.example.myrecipeplanner.screens.RecipeManagementScreen
+import com.google.firebase.FirebaseApp
 import java.time.LocalDate
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        FirebaseApp.initializeApp(this)
         enableEdgeToEdge()
         setContent {
 

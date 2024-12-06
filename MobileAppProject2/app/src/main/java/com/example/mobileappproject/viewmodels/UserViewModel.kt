@@ -119,7 +119,8 @@ class UserViewModel: ViewModel() {
     fun setRecipeState(recipe: RecipeState, selectedDate: LocalDate) {
         SharedState.recipeAlarmState.value = RecipeAlarmState(
             recipeName = recipe.name,
-            localDate = selectedDate
+            localDate = selectedDate,
+            nickname = _userStateFlow.value.nickname
         )
     }
 }
